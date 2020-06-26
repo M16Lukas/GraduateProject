@@ -1,7 +1,7 @@
 """
 - Title  : Bicycle Smart Lock
 - Writer : Minho Park
-- Data   : 29-05-2020 
+- Data   : 26-06-2020 
 """
 
 #######################################
@@ -33,13 +33,17 @@ MY_UUID = "24ddf411-8cf1-440c-87cd-e368daf9c93e"
 MY_MAJOR = 501
 MY_MINOR = 3015
 
-# GPIO
-GPIO_LED = 17
-
 # Setting up GPIO
+GPIO_LOCK = 18
 GPIO.setwarnings(False)
 GPIO.setmode(GPIO.BCM)
-GPIO.setup(GPIO_LED, GPIO.OUT, initial=GPIO.LOW) # using GPIO 17(PIN Number : 11)
+GPIO.setup(GPIO_LOCK, GPIO.OUT, initial=GPIO.LOW) # using GPIO 18
+
+# Set Linear Actuator
+lock_pwm = GPIO.PWM(GPIO_LOCK, 400) # 400 kHz
+lock_pwm.start(100)
+lock_on = 77
+lock_off = 41
 
 # Check if there is already running process.
 process = subprocess.check_output(["ps", "-ef"])
@@ -66,45 +70,34 @@ blescan.hci_enable_le_scan(sock)
 
 # Calculating beacon distance
 class Distance(threading.Thread):
-    def __init__(self, rssi, txpower):
+    queue = list()
+    n = 0
+    
+    def __init__(self, rssi, txpower, _n):
         threading.Thread.__init__(self)
         self.rssi = rssi
         self.txpower = txpower
+        self.n = _n
         
     def run(self):
-        N = 2
+        N = 5
         if self.rssi == 0:
             return -1.0 # if we can't determine accuracy, return -1
         
         ratio = self.txpower - self.rssi
         ratio2 = ratio / (10*N)
         d = pow(10, ratio2)
-        return d
-    
-class MoveAvgFilter(threading.Thread):
-    prevAvg = 0          # previous Average
-    xBuf = queue.Queue() # store The most recent n-points values
-    n = 0                # reference Data count
-    
-    def __init__(self, _n):
-        threading.Thread.__init__(self)
-        # n init
-        for _ in range(_n):
-            self.xBuf.put(0)
-            
-        # saving reference Data count
-        self.n = _n
-    
-    def moveAvgFilter(self, x):
-        # Queue's first value = x_(k-n)
-        front = self.xBuf.get()
-        # This step put input value at the Queue
-        self.xBuf.put(x)
         
-        avg = self.prevAvg + (x - front) / self.n
-        self.prevAvg = avg
+        # filtering beacon distance by using Move Average Filter
+        if len(self.queue) == self.n:
+            avg = sum(self.queue) / self.n
+            self.queue.pop()
+            self.queue.insert(0, d)
+        else:
+            self.queue.insert(0, d)
+            avg = sum(self.queue) / len(self.queue)
         
-        return avg
+        return d, avg
 
 #######################################
 ############### Working. ##############
@@ -129,34 +122,45 @@ print("---------------- Init -------------------")
 print("UUID  :", MY_UUID)
 print("Major :", MY_MAJOR)
 print("Minor :", MY_MINOR)
+print("-----------------------------------------")
 
+"""
+Main
+"""
 while True:
-    try:
+    try: 
         returnedList = blescan.my_parse_events(sock, 300, target=MY_UUID)
         
         matchCnt = 0
         for beacon in returnedList:
             beacon_split = list(beacon.values())
             if beacon_split[1] == MY_UUID and beacon_split[2] == MY_MAJOR and beacon_split[3] == MY_MINOR:
-                print("found beacon : %s" % beacon)
+                #print("found beacon : %s" % beacon)
                 matchCnt += 1
             
         if matchCnt >= 1:
-            beacon_distance = Distance(beacon_split[4], beacon_split[5]).run()
-            avg_beacon_distance = MoveAvgFilter(3).moveAvgFilter(beacon_distance)
-            if avg_beacon_distance <= 3:
-                print("distance :" + str(avg_beacon_distance) + " stable")
-                GPIO.output(GPIO_LED, True)
+            cnt = 0
+            bt_rssi = beacon_split[4]
+            bt_tx_power = beacon_split[5]
+            bt_n = 5
+            a, b = Distance(bt_rssi, bt_tx_power, bt_n).run()
+            print("distance : ", a)
+            print("avg      : ", b)
+            print("")
+            
+            if avg_beacon_distance < 1.0:
+                lock_pwm.ChangeDutyCycle(lock_off)
             else:
-                print("distance : " + str(avg_beacon_distance) + " too far")
-                GPIO.output(GPIO_LED, False)
+                lock_pwm.ChangeDutyCycle(lock_on)
         else:
-            GPIO.output(GPIO_LED, False)
+            lock_pwm.ChangeDutyCycle(lock_on)
 
     except KeyboardInterrupt as e:
         print("Main Exception : ", e)
         thread_flag = False
+        GPIO.cleanup()
         os._exit(1)
 
 thread_flag = False
+GPIO.cleanup()
 os._exit(1)

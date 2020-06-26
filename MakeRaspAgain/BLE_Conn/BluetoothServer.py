@@ -11,7 +11,7 @@ class ServerThread(threading.Thread):
         
     def run(self):
         server_socket = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
-        port = 1
+        port = bluetooth.PORT_ANY
         server_socket.bind(("",port))
         server_socket.listen(5)
         
@@ -22,6 +22,7 @@ class ServerThread(threading.Thread):
                 serviceThread.start()
             
         server_socket.close()
+        client_socket.close()
 
 class ServiceThread(threading.Thread):
     def __init__(self, client_socket, address):
@@ -125,4 +126,5 @@ class SendThread(threading.Thread):
         self.client_socket.close()
         
 serverThread = ServerThread()
-serverThread.start()
+while True:
+    serverThread.start()

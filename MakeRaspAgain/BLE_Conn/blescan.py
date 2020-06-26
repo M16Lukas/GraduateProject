@@ -175,7 +175,7 @@ def my_parse_events(sock, duration=3, target=None):
         ptype, event, plen = struct.unpack("BBB", packet[:3])
         packetOffset = 0
         dataString = packetToString(packet)
-        
+        #print (dataString)
         if dataString[38:46] == '4c000215':
             """
             Selects parts of the bluetooth packets.

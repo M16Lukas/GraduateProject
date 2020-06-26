@@ -8,49 +8,37 @@ import os
 import time
 import subprocess
 import threading
-import queue
 
 class Distance(threading.Thread):
-    def __init__(self, rssi, txpower):
+    queue = list()
+    n = 0
+    
+    def __init__(self, rssi, txpower, _n):
         threading.Thread.__init__(self)
         self.rssi = rssi
         self.txpower = txpower
+        self.n = _n
         
     def run(self):
-        N = 2
+        N = 5
         if self.rssi == 0:
             return -1.0 # if we can't determine accuracy, return -1
         
         ratio = self.txpower - self.rssi
         ratio2 = ratio / (10*N)
         d = pow(10, ratio2)
-        return d
-    
-class MoveAvgFilter(threading.Thread):
-    prevAvg = 0          # previous Average
-    xBuf = queue.Queue() # store The most recent n-points values
-    n = 0                # reference Data count
-    
-    def __init__(self, _n):
-        threading.Thread.__init__(self)
-        # n init
-        for _ in range(_n):
-            self.xBuf.put(0)
+        
+        # Move Avg Filter
+        if len(self.queue) == self.n:
+            avg = sum(self.queue) / self.n
+            self.queue.pop()
+            self.queue.insert(0, d)
+        else:
+            self.queue.insert(0, d)
+            avg = sum(self.queue) / len(self.queue)
+        
+        return d, self.queue, avg
             
-        # saving reference Data count
-        self.n = _n
-    
-    def moveAvgFilter(self, x):
-        # Queue's first value = x_(k-n)
-        front = self.xBuf.get()
-        # This step put input value at the Queue
-        self.xBuf.put(x)
-        
-        avg = self.prevAvg + (x - front) / self.n
-        self.prevAvg = avg
-        
-        return avg
-        
 
 dev_id = 0
 try:
@@ -70,10 +58,14 @@ try:
         for beacon in returnedList:
             beacon_split = list(beacon.values())
             #print(beacon)
-            a = Distance(beacon_split[4], beacon_split[5]).run()
-            b = MoveAvgFilter(3).moveAvgFilter(a)
-            print("distance : ", a, " meter")
-            print("avg : ", b, " meter")
-            print("")
+            if beacon_split[0] == "iBeacon":
+                bt_rssi = beacon_split[4]
+                bt_tx_power = beacon_split[5]
+                bt_n = 5
+                a, b, c = Distance(bt_rssi, bt_tx_power, bt_n).run()
+                print("distance : ", a)
+                print("queue    : ", b)
+                print("avg      : ", c)
+                print("")
 except KeyboardInterrupt:
     pass
