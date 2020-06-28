@@ -21,6 +21,7 @@ import bluetooth._bluetooth as bluez
 import bluetooth
 import blescan
 
+
 # GPIO
 import RPi.GPIO as GPIO
 
@@ -41,9 +42,9 @@ GPIO.setup(GPIO_LOCK, GPIO.OUT, initial=GPIO.LOW) # using GPIO 18
 
 # Set Linear Actuator
 lock_pwm = GPIO.PWM(GPIO_LOCK, 400) # 400 kHz
-lock_pwm.start(100)
-lock_on = 77
-lock_off = 41
+lock_pwm.start(0)
+lock_on = 80
+lock_off = 40
 
 # Check if there is already running process.
 process = subprocess.check_output(["ps", "-ef"])
@@ -80,13 +81,24 @@ class Distance(threading.Thread):
         self.n = _n
         
     def run(self):
+        # Calculating Beacon Distance
         N = 5
+        prev_rssi = 0
         if self.rssi == 0:
-            return -1.0 # if we can't determine accuracy, return -1
+            # if we can't determine accuracy, return -1
+            return -1.0
+        else:
+            # first noise of rssi filtering
+            if self.rssi - prev_rssi >= 4.0:
+                self.rssi = prev_rssi
+            else:
+                prev_rssi = self.rssi
         
-        ratio = self.txpower - self.rssi
-        ratio2 = ratio / (10*N)
-        d = pow(10, ratio2)
+        ratio = self.rssi*1.0/self.txpower
+        if ratio < 1.0:
+            d = pow(ratio, 10)
+        else:
+            d = 0.89976*pow(ratio,7.7095) + 0.111
         
         # filtering beacon distance by using Move Average Filter
         if len(self.queue) == self.n:
@@ -102,7 +114,7 @@ class Distance(threading.Thread):
 #######################################
 ############### Working. ##############
 #######################################
-
+    
 try:
     f = open("/etc/MakeKPUAgain.conf", 'r')
     conf_uuid = f.readline()
@@ -142,13 +154,13 @@ while True:
             cnt = 0
             bt_rssi = beacon_split[4]
             bt_tx_power = beacon_split[5]
-            bt_n = 5
-            a, b = Distance(bt_rssi, bt_tx_power, bt_n).run()
-            print("distance : ", a)
-            print("avg      : ", b)
+            bt_n = 10
+            distance, avg_distance = Distance(bt_rssi, bt_tx_power, bt_n).run()
+            print("distance : ", distance)
+            print("avg      : ", avg_distance)
             print("")
             
-            if avg_beacon_distance < 1.0:
+            if avg_distance < 2.5:
                 lock_pwm.ChangeDutyCycle(lock_off)
             else:
                 lock_pwm.ChangeDutyCycle(lock_on)

@@ -65,25 +65,20 @@ class Advertisement(dbus.service.Object):
         properties = dict()
         properties['Type'] = self.ad_type
         if self.service_uuids is not None:
-            properties['ServiceUUIDs'] = dbus.Array(self.service_uuids,
-                                                    signature='s')
+            properties['ServiceUUIDs'] = dbus.Array(self.service_uuids,signature='s')
         if self.solicit_uuids is not None:
-            properties['SolicitUUIDs'] = dbus.Array(self.solicit_uuids,
-                                                    signature='s')
+            properties['SolicitUUIDs'] = dbus.Array(self.solicit_uuids,signature='s')
         if self.manufacturer_data is not None:
-            properties['ManufacturerData'] = dbus.Dictionary(
-                self.manufacturer_data, signature='qv')
+            properties['ManufacturerData'] = dbus.Dictionary(self.manufacturer_data, signature='qv')
         if self.service_data is not None:
-            properties['ServiceData'] = dbus.Dictionary(self.service_data,
-                                                        signature='sv')
+            properties['ServiceData'] = dbus.Dictionary(self.service_data, signature='sv')
         if self.local_name is not None:
             properties['LocalName'] = dbus.String(self.local_name)
         if self.include_tx_power is not None:
             properties['IncludeTxPower'] = dbus.Boolean(self.include_tx_power)
 
         if self.data is not None:
-            properties['Data'] = dbus.Dictionary(
-                self.data, signature='yv')
+            properties['Data'] = dbus.Dictionary(self.data, signature='yv')
         return {LE_ADVERTISEMENT_IFACE: properties}
 
     def get_path(self):
@@ -139,22 +134,15 @@ class Advertisement(dbus.service.Object):
 class TestAdvertisement(Advertisement):
 
     def __init__(self, bus, index):
-        company_id = 0x004C
-        beacon_type = [0x02, 0x15]
-        uuid = [0x4a, 0x4e, 0xce, 0x60, 0x7e, 0xb0, 0x11, 0xe4,
-                0xb4, 0xa9, 0x08, 0x00, 0x20, 0x0c, 0x9a, 0x66]
-        major = [0x20, 0x20]
-        minor = [0x07, 0x10]
-        tx_power = [0xB3]
         Advertisement.__init__(self, bus, index, 'peripheral')
-        self.add_manufacturer_data(company_id, beacon_type + uuid + major + minor + tx_power)
-        self.add_local_name('AutoBy')
-        #self.add_service_uuid('180D')
-        #self.add_service_uuid('180F')
-        #self.add_manufacturer_data(0xffff, [0x00, 0x01, 0x02, 0x03, 0x04])
-        #self.add_service_data('9999', [0x00, 0x01, 0x02, 0x03, 0x04])
-        #self.include_tx_power = True
-        #self.add_data(0x26, [0x01, 0x01, 0x00])
+        self.add_service_uuid('180D')
+        self.add_service_uuid('180F')
+        self.add_manufacturer_data(0xffff, [0x00, 0x01, 0x02, 0x03, 0x04])
+        self.add_service_data('9999', [0x00, 0x01, 0x02, 0x03, 0x04])
+        self.add_local_name('TestAdvertisement')
+        self.include_tx_power = True
+        self.add_data(0x26, [0x01, 0x01, 0x00])
+
 
 
 def register_ad_cb():
@@ -167,8 +155,7 @@ def register_ad_error_cb(error):
 
 
 def find_adapter(bus):
-    remote_om = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, '/'),
-                               DBUS_OM_IFACE)
+    remote_om = dbus.Interface(bus.get_object(BLUEZ_SERVICE_NAME, '/'), DBUS_OM_IFACE)
     objects = remote_om.GetManagedObjects()
 
     for o, props in objects.items():
