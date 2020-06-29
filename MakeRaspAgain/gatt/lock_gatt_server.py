@@ -4,8 +4,6 @@ import dbus.exceptions
 import dbus.mainloop.glib
 import dbus.service
 
-import gatt
-
 import array
 try:
   from gi.repository import GObject

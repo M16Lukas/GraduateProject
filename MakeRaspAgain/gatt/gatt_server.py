@@ -5,7 +5,7 @@ import dbus.mainloop.glib
 import dbus.service
 
 import array
-
+import threading
 import functools
 
 try:
@@ -33,11 +33,13 @@ GATT_DESC_IFACE =    'org.bluez.GattDescriptor1'
 
 
 
-class Application(dbus.service.Object):
+class Application(threading.Thread, dbus.service.Object):
     """
     org.bluez.GattApplication1 interface implementation
     """
     def __init__(self, bus):
+        threading.Thread.__init__(self)
+        
         self.path = '/'
         self.services = []
         dbus.service.Object.__init__(self, bus, self.path)
@@ -68,13 +70,15 @@ class Application(dbus.service.Object):
         return response
 
 
-class Service(dbus.service.Object):
+class Service(threading.Thread, dbus.service.Object):
     """
     org.bluez.GattService1 interface implementation
     """
     PATH_BASE = '/org/bluez/example/service'
 
     def __init__(self, bus, index, uuid, primary):
+        threading.Thread.__init__(self)
+        
         self.path = self.PATH_BASE + str(index)
         self.bus = bus
         self.uuid = uuid
@@ -118,11 +122,13 @@ class Service(dbus.service.Object):
         return self.get_properties()[GATT_SERVICE_IFACE]
 
 
-class Characteristic(dbus.service.Object):
+class Characteristic(threading.Thread, dbus.service.Object):
     """
     org.bluez.GattCharacteristic1 interface implementation
     """
     def __init__(self, bus, index, uuid, flags, service):
+        threading.Thread.__init__(self)
+        
         self.path = service.path + '/char' + str(index)
         self.bus = bus
         self.uuid = uuid
@@ -195,11 +201,13 @@ class Characteristic(dbus.service.Object):
         pass
 
 
-class Descriptor(dbus.service.Object):
+class Descriptor(threading.Thread, dbus.service.Object):
     """
     org.bluez.GattDescriptor1 interface implementation
     """
     def __init__(self, bus, index, uuid, flags, characteristic):
+        threading.Thread.__init__(self)
+        
         self.path = characteristic.path + '/desc' + str(index)
         self.bus = bus
         self.uuid = uuid
@@ -248,7 +256,7 @@ class HeartRateService(Service):
     """
     HR_UUID = '0000180d-0000-1000-8000-00805f9b34fb'
 
-    def __init__(self, bus, index):
+    def __init__(self, bus, index): 
         Service.__init__(self, bus, index, self.HR_UUID, True)
         self.add_characteristic(HeartRateMeasurementChrc(bus, 0, self))
         self.add_characteristic(BodySensorLocationChrc(bus, 1, self))
