@@ -1,6 +1,7 @@
 import dbus
 import dbus.mainloop.glib
 from time import sleep, time
+import numpy as np
  
 try:
     from gi.repository import GObject
@@ -10,6 +11,14 @@ except ImportError:
 from bluez_components import *
  
 mainloop = None
+
+def check_password(value):
+    Crypto_Code = [0x01, 0x0f, 0x05, 0x0d, 0x08, 0x0b]
+    ch = np.equal(Crypto_Code, value)
+    if False in ch:
+        print("get out!!!!!")
+    else:
+        print("come on buddy")
 
 class cmdChrc(Characteristic):
     CMD_UUID = '0d0f0fe1-0e65-1d70-855e-02505f9c40e1'
@@ -28,13 +37,14 @@ class cmdChrc(Characteristic):
  
     def WriteValue(self, value, options):
         print('RowCharacteristic Write: ' + repr(value))
+        check_password(value)
  
  
 class MotorService(Service):
-    DKDK_SVC_UUID = '0d0f0fe1-0e65-1d70-855e-02505f9c40e0'
+    SVC_UUID = '0d0f0fe1-0e65-1d70-855e-02505f9c40e0'
  
     def __init__(self, bus, index):
-        Service.__init__(self, bus, index, self.DKDK_SVC_UUID, True)
+        Service.__init__(self, bus, index, self.SVC_UUID, True)
         self.add_characteristic(cmdChrc(bus, 0, self))
  
  
@@ -47,7 +57,7 @@ class MotorApplication(Application):
 class MotorAdvertisement(Advertisement):
     def __init__(self, bus, index):
         Advertisement.__init__(self, bus, index, 'peripheral')
-        self.add_service_uuid(MotorService.DKDK_SVC_UUID)
+        self.add_service_uuid(MotorService.SVC_UUID)
         self.include_tx_power = True
  
 
