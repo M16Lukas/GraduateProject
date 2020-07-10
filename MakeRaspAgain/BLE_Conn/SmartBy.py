@@ -1,7 +1,8 @@
+#!/usr/bin/python
 """
 - Title  : Bicycle Smart Lock
 - Writer : Minho Park
-- Data   : 01-07-2020 
+- Date   : 07-07-2020 
 """
 
 import sys
@@ -9,6 +10,8 @@ import os
 import time
 import subprocess as np
 import threading
+
+import bluetooth
 
 import RPi.GPIO as GPIO
 
@@ -38,7 +41,6 @@ class LockOnOff(threading.Thread):
     # 1.0 ms pulse commands the controller to fully retract the actuator 
     def On(self):
         for dc in range(95,101,1):
-            print("on : ", dc)
             lock_pwm.ChangeDutyCycle(dc)
             time.sleep(0.1)
             if dc == 100:
@@ -46,18 +48,17 @@ class LockOnOff(threading.Thread):
 
     # 2.0 ms pulse signals it to fully extend
     def Off(self):
-        for dc in range(47,41,-1):
-            print("off : ", dc)
+        for dc in range(48,40,-1):
+            print(dc)
             lock_pwm.ChangeDutyCycle(dc)
             time.sleep(0.1)
-            if dc == 42:
+            if dc == 41:
                 self.Stop()
 
     def Stop(self):
         for dc in range(0,40,1):
-            print("stop")
             lock_pwm.ChangeDutyCycle(dc)
-            time.sleep(0.1)
+            time.sleep(0.5)
 
 
 #######################################
@@ -83,7 +84,7 @@ while True:
         
         connected_device_info = np.getoutput("hcitool con").split() # listed
         if len(connected_device_info) > 1:
-            device_mac = connected_device_info[3] # MAC Address of connected Device(GATT client)
+            device_mac = connected_device_info[3]# MAC Address of connected Device(GATT client)
             matchCnt += 1
 
         # connected
