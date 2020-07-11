@@ -33,8 +33,8 @@ class Folder_control(threading.Thread):
         if file_list is None:
             pass
         else:
-            file = file_list[0]
-            os.remove(file)
+            files = file_list[0]
+            os.remove(path+'/'files)
 
 """
 Recoring
