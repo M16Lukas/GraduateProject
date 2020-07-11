@@ -29,11 +29,11 @@ class Folder_control(threading.Thread):
             return 1024 ** (val)
     
     def RemoveFile(self, path):
-        file_list = os.listdir(path)
-        if file_list is None:
+        files_list = os.listdir(path)
+        if not files_list:
             pass
         else:
-            files = file_list[0]
+            files = files_list[0]
             os.remove(path+'/'files)
 
 """
@@ -45,7 +45,7 @@ class Recording(threading.Thread):
     camera = picamera.PiCamera()
     camera.resolution = (1280,720)
     camera.framerate = 30
-    recording_time = 3600 # 1 hour (3600 sec)
+    recording_time = 3600 # 1 hour
 
     def __init__(self):
         threading.Thread.__init__(self)
@@ -64,7 +64,7 @@ get_dir = Folder_control()
 
 while True:
     used_space = (get_dir.getDir(savepath) / get_dir.Unit('G'))
-    if used_space > 3.0:
+    if used_space > 3.6:
         get_dir.RemoveFile(savepath)
     else:
         Recording().recordOneHour()
