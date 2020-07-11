@@ -1,3 +1,10 @@
+#!/usr/bin/python
+"""
+- Title  : Bicycle Smart Lock
+- Writer : Minho Park
+- Date   : 12-07-2020 
+"""
+
 import sys
 import os
 import threading
@@ -18,6 +25,10 @@ except ImportError:
 from bluez_components import *
  
 mainloop = None
+
+#######################################
+###     Linear Actuator Control     ###
+#######################################
 
 # Setting up GPIO
 GPIO_LOCK = 18
@@ -80,7 +91,6 @@ class cmdChrc(Characteristic):
             self.CMD_UUID, 
             ['write'],
             service)
-        self.value = [ 0x00 for i in range(1024) ]
  
     def WriteValue(self, value, options):
         print('RowCharacteristic Write: ' + repr(value))
@@ -106,7 +116,65 @@ class MotorAdvertisement(Advertisement):
         Advertisement.__init__(self, bus, index, 'peripheral')
         self.add_service_uuid(MotorService.SVC_UUID)
         self.include_tx_power = True
+
+
+#######################################
+###       Black Box Control         ###
+#######################################
+
+savepath = '/home/pi/MakeRaspAgain/VideoRecord'
+
+class VideoChrc(Characteristic):
+    CMD_UUID = '020a0df4-0c74-1a40-725e-01806fac4081'
  
+    def __init__(self, bus, index, service):
+        Characteristic.__init__(
+            self, bus, index,
+            self.CMD_UUID, 
+            ['read', 'notify'],
+            service)
+        self.notifying = False
+        self.value = [ 0x00 for i in range(1024) ]
+ 
+    def ReadValue(self, options):
+        print('RowCharacteristic read: ' + repr(self.value))
+        return self.value
+    
+    def StartNotify(self):
+        if self.notifying:
+            print("Already notifying, nothing to do")
+            return
+        
+        self.notifying = True
+    
+    def StopNotify(self):
+        if not self.notifying:
+            print('Not notifying, nothing to do')
+            return
+        
+        self.notifying = False
+
+
+class VideoService(Service):
+    SVC_UUID = '020a0df4-0c74-1a40-725e-01806fac4080'
+    
+    def __init__(self, bus, index):
+        Service.__init__(self, bus, index, self.SVC_UUID, True)
+        self.add_characteristic(VideoChrc(bus, 0, self))
+
+
+class VideoApplication(Application):
+    def __init__(self, bus):
+        Application.__init__(self, bus)
+        self.add_service(VideoService(bus, 0))
+ 
+ 
+class VideoAdvertisement(Advertisement):
+    def __init__(self, bus, index):
+        Advertisement.__init__(self, bus, index, 'peripheral')
+        self.add_service_uuid(VideoService.SVC_UUID)
+        self.include_tx_power = True
+
 
 def register_ad_cb():
     """
