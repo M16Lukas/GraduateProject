@@ -12,6 +12,7 @@ import dbus
 import dbus.mainloop.glib
 
 from time import sleep, time
+from bluez_components import *
 
 import RPi.GPIO as GPIO
 import numpy as np
@@ -21,8 +22,7 @@ try:
     from gi.repository import GObject
 except ImportError:
     import gobject as GObject
- 
-from bluez_components import *
+
  
 mainloop = None
 
@@ -45,6 +45,7 @@ Linear Actuator(L12-30-100-6-R)
 """
 lock_pwm = GPIO.PWM(GPIO_LOCK, 500)   # Frequency = 0.5 kHz (2 ms)
 lock_pwm.start(100)                   # Duty Cycle = 100
+
 class LockOnOff(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
@@ -76,11 +77,10 @@ def check_password(value):
     Crypto_Code = [0x01, 0x0f, 0x05, 0x0d, 0x08, 0x0b]
     ch = np.equal(Crypto_Code, value)
     if False in ch:
-        print("get out!!!!!")
         LockOnOff().On()
     else:
-        print("come on buddy")
         LockOnOff().Off()
+
 
 class cmdChrc(Characteristic):
     CMD_UUID = '0d0f0fe1-0e65-1d70-855e-02505f9c40e1'
@@ -123,6 +123,11 @@ class MotorAdvertisement(Advertisement):
 #######################################
 
 savepath = '/home/pi/MakeRaspAgain/VideoRecord'
+
+def videoFile(self, path):
+    files_list = os.listdir(path)
+    return files_list
+         
 
 class VideoChrc(Characteristic):
     CMD_UUID = '020a0df4-0c74-1a40-725e-01806fac4081'
