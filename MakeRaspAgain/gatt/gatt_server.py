@@ -1,4 +1,8 @@
 from __future__ import print_function
+from time import sleep, time
+
+import sys
+import os
 import dbus
 import dbus.exceptions
 import dbus.mainloop.glib
@@ -7,6 +11,10 @@ import dbus.service
 import array
 import threading
 import functools
+
+import RPi.GPIO as GPIO
+import numpy as np
+import subprocess as sp
 
 try:
   from gi.repository import GObject
@@ -43,9 +51,8 @@ class Application(threading.Thread, dbus.service.Object):
         self.path = '/'
         self.services = []
         dbus.service.Object.__init__(self, bus, self.path)
-        self.add_service(HeartRateService(bus, 0))
-        self.add_service(BatteryService(bus, 1))
-        self.add_service(TestService(bus, 2))
+        self.add_service(MotorService(bus, 0))
+        self.add_service(VideoService(bus, 1))
 
     def get_path(self):
         return dbus.ObjectPath(self.path)
@@ -249,353 +256,133 @@ class Descriptor(threading.Thread, dbus.service.Object):
         raise exceptions.NotSupportedException()
 
 
-class HeartRateService(Service):
-    """
-    Fake Heart Rate Service that simulates a fake heart beat and control point
-    behavior.
-    """
-    HR_UUID = '0000180d-0000-1000-8000-00805f9b34fb'
+#######################################
+###     Linear Actuator Control     ###
+#######################################
 
-    def __init__(self, bus, index): 
-        Service.__init__(self, bus, index, self.HR_UUID, True)
-        self.add_characteristic(HeartRateMeasurementChrc(bus, 0, self))
-        self.add_characteristic(BodySensorLocationChrc(bus, 1, self))
-        self.add_characteristic(HeartRateControlPointChrc(bus, 2, self))
-        self.energy_expended = 0
+# Setting up GPIO
+GPIO_LOCK = 18
+GPIO.setwarnings(False)
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(GPIO_LOCK, GPIO.OUT)     # using GPIO 18
+
+"""
+Linear Actuator(L12-30-100-6-R)
+- Stroke Length       = 30 mm
+- Gear reduction Rate = 100
+- Voltage             = 6 Volt (DC)
+- Controller          = R (RC Servo Integrated)
+"""
+lock_pwm = GPIO.PWM(GPIO_LOCK, 500)   # Frequency = 0.5 kHz (2 ms)
+lock_pwm.start(100)                   # Duty Cycle = 100
+
+class LockOnOff(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+    
+    # 1.0 ms pulse commands the controller to fully retract the actuator 
+    def On(self):
+        for dc in range(95,101,1):
+            lock_pwm.ChangeDutyCycle(dc)
+            sleep(0.1)
+            if dc == 100:
+                self.Stop()
+
+    # 2.0 ms pulse signals it to fully extend
+    def Off(self):
+        for dc in range(48,40,-1):
+            lock_pwm.ChangeDutyCycle(dc)
+            sleep(0.1)
+            if dc == 41:
+                self.Stop()
+
+    def Stop(self):
+        for dc in range(0,20,1):
+            lock_pwm.ChangeDutyCycle(dc)
+            sleep(0.5)
 
 
-class HeartRateMeasurementChrc(Characteristic):
-    HR_MSRMT_UUID = '00002a37-0000-1000-8000-00805f9b34fb'
+def check_password(value):
+    Crypto_Code = [0x01, 0x0f, 0x05, 0x0d, 0x08, 0x0b]
+    ch = np.equal(Crypto_Code, value)
+    if False in ch:
+        LockOnOff().On()
+    else:
+        LockOnOff().Off()
 
+
+class cmdChrc(Characteristic):
+    CMD_UUID = '0d0f0fe1-0e65-1d70-855e-02505f9c40e1'
+ 
     def __init__(self, bus, index, service):
         Characteristic.__init__(
-                self, bus, index,
-                self.HR_MSRMT_UUID,
-                ['notify'],
-                service)
+            self, bus, index,
+            self.CMD_UUID, 
+            ['write'],
+            service)
+ 
+    def WriteValue(self, value, options):
+        print('RowCharacteristic Write: ' + repr(value))
+        check_password(value)
+ 
+ 
+class MotorService(Service):
+    SVC_UUID = '0d0f0fe1-0e65-1d70-855e-02505f9c40e0'
+ 
+    def __init__(self, bus, index):
+        Service.__init__(self, bus, index, self.SVC_UUID, True)
+        self.add_characteristic(cmdChrc(bus, 0, self))
+
+
+#######################################
+###       Black Box Control         ###
+#######################################
+
+class VideoChrc(Characteristic):
+    CMD_UUID = '020a0df4-0c74-1a40-725e-01806fac4081'
+    
+    savepath = '/home/pi/MakeRaspAgain/VideoRecord'
+    
+    def __init__(self, bus, index, service):
+        Characteristic.__init__(
+            self, bus, index,
+            self.CMD_UUID, 
+            ['read', 'notify'],
+            service)
         self.notifying = False
-        self.hr_ee_count = 0
-
-    def hr_msrmt_cb(self):
-        value = []
-        value.append(dbus.Byte(0x06))
-
-        value.append(dbus.Byte(randint(90, 130)))
-
-        if self.hr_ee_count % 10 == 0:
-            value[0] = dbus.Byte(value[0] | 0x08)
-            value.append(dbus.Byte(self.service.energy_expended & 0xff))
-            value.append(dbus.Byte((self.service.energy_expended >> 8) & 0xff))
-
-        self.service.energy_expended = \
-                min(0xffff, self.service.energy_expended + 1)
-        self.hr_ee_count += 1
-
-        print('Updating value: ' + repr(value))
-
-        self.PropertiesChanged(GATT_CHRC_IFACE, { 'Value': value }, [])
-
-        return self.notifying
-
-    def _update_hr_msrmt_simulation(self):
-        print('Update HR Measurement Simulation')
-
-        if not self.notifying:
-            return
-
-        GObject.timeout_add(1000, self.hr_msrmt_cb)
-
+        self.value = []
+        
+    def videoFile(self, path):
+        files_list = os.listdir(path)
+        return files_list
+    
+    def ReadValue(self, options):
+        self.value = self.videoFile(self.savepath)
+        print('RowCharacteristic read: ' + repr(self.value))
+        return [dbus.Byte(i) for i in self.value]
+    
     def StartNotify(self):
         if self.notifying:
-            print('Already notifying, nothing to do')
+            print("Already notifying, nothing to do")
             return
-
+        
         self.notifying = True
-        self._update_hr_msrmt_simulation()
-
+    
     def StopNotify(self):
         if not self.notifying:
             print('Not notifying, nothing to do')
             return
-
+        
         self.notifying = False
-        self._update_hr_msrmt_simulation()
 
 
-class BodySensorLocationChrc(Characteristic):
-    BODY_SNSR_LOC_UUID = '00002a38-0000-1000-8000-00805f9b34fb'
-
-    def __init__(self, bus, index, service):
-        Characteristic.__init__(
-                self, bus, index,
-                self.BODY_SNSR_LOC_UUID,
-                ['read'],
-                service)
-
-    def ReadValue(self, options):
-        # Return 'Chest' as the sensor location.
-        return [ 0x01 ]
-
-class HeartRateControlPointChrc(Characteristic):
-    HR_CTRL_PT_UUID = '00002a39-0000-1000-8000-00805f9b34fb'
-
-    def __init__(self, bus, index, service):
-        Characteristic.__init__(
-                self, bus, index,
-                self.HR_CTRL_PT_UUID,
-                ['write'],
-                service)
-
-    def WriteValue(self, value, options):
-        print('Heart Rate Control Point WriteValue called')
-
-        if len(value) != 1:
-            raise exceptions.InvalidValueLengthException()
-
-        byte = value[0]
-        print('Control Point value: ' + repr(byte))
-
-        if byte != 1:
-            raise exceptions.FailedException("0x80")
-
-        print('Energy Expended field reset!')
-        self.service.energy_expended = 0
-
-
-class BatteryService(Service):
-    """
-    Fake Battery service that emulates a draining battery.
-    """
-    BATTERY_UUID = '180f'
-
+class VideoService(Service):
+    SVC_UUID = '020a0df4-0c74-1a40-725e-01806fac4080'
+    
     def __init__(self, bus, index):
-        Service.__init__(self, bus, index, self.BATTERY_UUID, True)
-        self.add_characteristic(BatteryLevelCharacteristic(bus, 0, self))
+        Service.__init__(self, bus, index, self.SVC_UUID, True)
+        self.add_characteristic(VideoChrc(bus, 0, self))
 
-
-class BatteryLevelCharacteristic(Characteristic):
-    """
-    Fake Battery Level characteristic. The battery level is drained by 2 points
-    every 5 seconds.
-    """
-    BATTERY_LVL_UUID = '2a19'
-
-    def __init__(self, bus, index, service):
-        Characteristic.__init__(
-                self, bus, index,
-                self.BATTERY_LVL_UUID,
-                ['read', 'notify'],
-                service)
-        self.notifying = False
-        self.battery_lvl = 100
-        GObject.timeout_add(5000, self.drain_battery)
-
-    def notify_battery_level(self):
-        if not self.notifying:
-            return
-        self.PropertiesChanged(
-                GATT_CHRC_IFACE,
-                {'Value': [dbus.Byte(self.battery_lvl)] }, [])
-
-    def drain_battery(self):
-        if self.battery_lvl > 0:
-            self.battery_lvl -= 2
-            if self.battery_lvl < 0:
-                self.battery_lvl = 0
-        print('Battery level: ' + repr(self.battery_lvl))
-        self.notify_battery_level()
-        return True
-
-    def ReadValue(self, options):
-        print('Battery level read: ' + repr(self.battery_lvl))
-        return [dbus.Byte(self.battery_lvl)]
-
-    def StartNotify(self):
-        if self.notifying:
-            print('Already notifying, nothing to do')
-            return
-
-        self.notifying = True
-        self.notify_battery_level()
-
-    def StopNotify(self):
-        if not self.notifying:
-            print('Not notifying, nothing to do')
-            return
-
-        self.notifying = False
-
-
-class TestService(Service):
-    """
-    Dummy test service that provides characteristics and descriptors that
-    exercise various API functionality.
-    """
-    TEST_SVC_UUID = '12345678-1234-5678-1234-56789abcdef0'
-
-    def __init__(self, bus, index):
-        Service.__init__(self, bus, index, self.TEST_SVC_UUID, True)
-        self.add_characteristic(TestCharacteristic(bus, 0, self))
-        self.add_characteristic(TestEncryptCharacteristic(bus, 1, self))
-        self.add_characteristic(TestSecureCharacteristic(bus, 2, self))
-
-class TestCharacteristic(Characteristic):
-    """
-    Dummy test characteristic. Allows writing arbitrary bytes to its value, and
-    contains "extended properties", as well as a test descriptor.
-    """
-    TEST_CHRC_UUID = '12345678-1234-5678-1234-56789abcdef1'
-
-    def __init__(self, bus, index, service):
-        Characteristic.__init__(
-                self, bus, index,
-                self.TEST_CHRC_UUID,
-                ['read', 'write', 'writable-auxiliaries'],
-                service)
-        self.value = []
-        self.add_descriptor(TestDescriptor(bus, 0, self))
-        self.add_descriptor(
-                CharacteristicUserDescriptionDescriptor(bus, 1, self))
-
-    def ReadValue(self, options):
-        print('TestCharacteristic Read: ' + repr(self.value))
-        return self.value
-
-    def WriteValue(self, value, options):
-        print('TestCharacteristic Write: ' + repr(value))
-        self.value = value
-
-
-class TestDescriptor(Descriptor):
-    """
-    Dummy test descriptor. Returns a static value.
-    """
-    TEST_DESC_UUID = '12345678-1234-5678-1234-56789abcdef2'
-
-    def __init__(self, bus, index, characteristic):
-        Descriptor.__init__(
-                self, bus, index,
-                self.TEST_DESC_UUID,
-                ['read', 'write'],
-                characteristic)
-
-    def ReadValue(self, options):
-        return [
-                dbus.Byte('T'), dbus.Byte('e'), dbus.Byte('s'), dbus.Byte('t')
-        ]
-
-
-class CharacteristicUserDescriptionDescriptor(Descriptor):
-    """
-    Writable CUD descriptor.
-    """
-    CUD_UUID = '2901'
-
-    def __init__(self, bus, index, characteristic):
-        self.writable = 'writable-auxiliaries' in characteristic.flags
-        self.value = array.array('B', b'This is a characteristic for testing')
-        self.value = self.value.tolist()
-        Descriptor.__init__(
-                self, bus, index,
-                self.CUD_UUID,
-                ['read', 'write'],
-                characteristic)
-
-    def ReadValue(self, options):
-        return self.value
-
-    def WriteValue(self, value, options):
-        if not self.writable:
-            raise exceptions.NotPermittedException()
-        self.value = value
-
-class TestEncryptCharacteristic(Characteristic):
-    """
-    Dummy test characteristic requiring encryption.
-    """
-    TEST_CHRC_UUID = '12345678-1234-5678-1234-56789abcdef3'
-
-    def __init__(self, bus, index, service):
-        Characteristic.__init__(
-                self, bus, index,
-                self.TEST_CHRC_UUID,
-                ['encrypt-read', 'encrypt-write'],
-                service)
-        self.value = []
-        self.add_descriptor(TestEncryptDescriptor(bus, 2, self))
-        self.add_descriptor(
-                CharacteristicUserDescriptionDescriptor(bus, 3, self))
-
-    def ReadValue(self, options):
-        print('TestEncryptCharacteristic Read: ' + repr(self.value))
-        return self.value
-
-    def WriteValue(self, value, options):
-        print('TestEncryptCharacteristic Write: ' + repr(value))
-        self.value = value
-
-class TestEncryptDescriptor(Descriptor):
-    """
-    Dummy test descriptor requiring encryption. Returns a static value.
-    """
-    TEST_DESC_UUID = '12345678-1234-5678-1234-56789abcdef4'
-
-    def __init__(self, bus, index, characteristic):
-        Descriptor.__init__(
-                self, bus, index,
-                self.TEST_DESC_UUID,
-                ['encrypt-read', 'encrypt-write'],
-                characteristic)
-
-    def ReadValue(self, options):
-        return [
-                dbus.Byte('T'), dbus.Byte('e'), dbus.Byte('s'), dbus.Byte('t')
-        ]
-
-
-class TestSecureCharacteristic(Characteristic):
-    """
-    Dummy test characteristic requiring secure connection.
-    """
-    TEST_CHRC_UUID = '12345678-1234-5678-1234-56789abcdef5'
-
-    def __init__(self, bus, index, service):
-        Characteristic.__init__(
-                self, bus, index,
-                self.TEST_CHRC_UUID,
-                ['secure-read', 'secure-write'],
-                service)
-        self.value = []
-        self.add_descriptor(TestSecureDescriptor(bus, 2, self))
-        self.add_descriptor(
-                CharacteristicUserDescriptionDescriptor(bus, 3, self))
-
-    def ReadValue(self, options):
-        print('TestSecureCharacteristic Read: ' + repr(self.value))
-        return self.value
-
-    def WriteValue(self, value, options):
-        print('TestSecureCharacteristic Write: ' + repr(value))
-        self.value = value
-
-
-class TestSecureDescriptor(Descriptor):
-    """
-    Dummy test descriptor requiring secure connection. Returns a static value.
-    """
-    TEST_DESC_UUID = '12345678-1234-5678-1234-56789abcdef6'
-
-    def __init__(self, bus, index, characteristic):
-        Descriptor.__init__(
-                self, bus, index,
-                self.TEST_DESC_UUID,
-                ['secure-read', 'secure-write'],
-                characteristic)
-
-    def ReadValue(self, options):
-        return [
-                dbus.Byte('T'), dbus.Byte('e'), dbus.Byte('s'), dbus.Byte('t')
-        ]
 
 def register_app_cb():
     print('GATT application registered')
