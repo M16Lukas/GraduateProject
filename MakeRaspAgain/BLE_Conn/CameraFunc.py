@@ -34,7 +34,7 @@ class Folder_control(threading.Thread):
             pass
         else:
             files = files_list[0]
-            os.remove(path+'/'files)
+            os.remove(path+'/'+files)
 
 """
 Recoring
