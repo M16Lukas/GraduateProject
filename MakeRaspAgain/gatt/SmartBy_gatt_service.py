@@ -61,7 +61,6 @@ class LockOnOff(threading.Thread):
     # 2.0 ms pulse signals it to fully extend
     def Off(self):
         for dc in range(48,40,-1):
-            print(dc)
             lock_pwm.ChangeDutyCycle(dc)
             sleep(0.1)
             if dc == 41:
@@ -104,34 +103,16 @@ class MotorService(Service):
         Service.__init__(self, bus, index, self.SVC_UUID, True)
         self.add_characteristic(cmdChrc(bus, 0, self))
  
- 
-class MotorApplication(Application):
-    def __init__(self, bus):
-        Application.__init__(self, bus)
-        self.add_service(MotorService(bus, 0))
- 
- 
-class MotorAdvertisement(Advertisement):
-    def __init__(self, bus, index):
-        Advertisement.__init__(self, bus, index, 'peripheral')
-        self.add_service_uuid(MotorService.SVC_UUID)
-        self.include_tx_power = True
-
 
 #######################################
 ###       Black Box Control         ###
 #######################################
 
-savepath = '/home/pi/MakeRaspAgain/VideoRecord'
-
-def videoFile(self, path):
-    files_list = os.listdir(path)
-    return files_list
-         
-
 class VideoChrc(Characteristic):
     CMD_UUID = '020a0df4-0c74-1a40-725e-01806fac4081'
- 
+    
+    savepath = '/home/pi/MakeRaspAgain/VideoRecord'
+    
     def __init__(self, bus, index, service):
         Characteristic.__init__(
             self, bus, index,
@@ -139,11 +120,16 @@ class VideoChrc(Characteristic):
             ['read', 'notify'],
             service)
         self.notifying = False
-        self.value = [ 0x00 for i in range(1024) ]
- 
+        self.value = []
+        
+    def videoFile(self, path):
+        files_list = os.listdir(path)
+        return files_list
+    
     def ReadValue(self, options):
+        self.value = self.videoFile(self.savepath)
         print('RowCharacteristic read: ' + repr(self.value))
-        return self.value
+        return [dbus.Byte(i) for i in self.value]
     
     def StartNotify(self):
         if self.notifying:
@@ -168,16 +154,21 @@ class VideoService(Service):
         self.add_characteristic(VideoChrc(bus, 0, self))
 
 
-class VideoApplication(Application):
+#######################################
+###      Function Registration      ###
+#######################################
+ 
+class Func_Application(Application):
     def __init__(self, bus):
         Application.__init__(self, bus)
-        self.add_service(VideoService(bus, 0))
+        self.add_service(MotorService(bus, 0))
+        self.add_service(VideoService(bus, 1))
  
  
-class VideoAdvertisement(Advertisement):
+class Func_Advertisement(Advertisement):
     def __init__(self, bus, index):
         Advertisement.__init__(self, bus, index, 'peripheral')
-        self.add_service_uuid(VideoService.SVC_UUID)
+        self.add_local_name('AutoBy')
         self.include_tx_power = True
 
 
@@ -223,22 +214,23 @@ def main():
     ad_manager = get_ad_manager(bus)
  
     # Create gatt services
-    app = MotorApplication(bus)
+    func_app = Func_Application(bus)
  
     # Create advertisement
-    dkdk_advertisement = MotorAdvertisement(bus, 0)
- 
+    func_advertisement = Func_Advertisement(bus, 0)
+    
     mainloop = GObject.MainLoop()
  
     # Register gatt services
-    service_manager.RegisterApplication(app.get_path(), {},
+    service_manager.RegisterApplication(func_app.get_path(), {},
                                         reply_handler=register_app_cb,
                                         error_handler=register_app_error_cb)
  
     # Register advertisement
-    ad_manager.RegisterAdvertisement(dkdk_advertisement.get_path(), {},
+    ad_manager.RegisterAdvertisement(func_advertisement.get_path(), {},
                                      reply_handler=register_ad_cb,
                                      error_handler=register_ad_error_cb)
+                                     
  
     try:
         mainloop.run()
