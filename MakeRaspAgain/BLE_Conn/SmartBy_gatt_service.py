@@ -2,7 +2,7 @@
 """
 - Title  : Bicycle Smart Lock
 - Writer : Minho Park
-- Date   : 12-07-2020 
+- Date   : 13-07-2020 
 """
 
 import sys
@@ -43,38 +43,45 @@ Linear Actuator(L12-30-100-6-R)
 - Voltage             = 6 Volt (DC)
 - Controller          = R (RC Servo Integrated)
 """
-lock_pwm = GPIO.PWM(GPIO_LOCK, 500)   # Frequency = 0.5 kHz (2 ms)
-lock_pwm.start(100)                   # Duty Cycle = 100
 
+# Lock On & Off
 class LockOnOff(threading.Thread):
+
+    lock_pwm = GPIO.PWM(GPIO_LOCK, 500)   # Frequency = 0.5 kHz (2 ms)
+    lock_pwm.start(100)                   # Duty Cycle = 100
+    check_int = 0
+    
     def __init__(self):
         threading.Thread.__init__(self)
     
     # 1.0 ms pulse commands the controller to fully retract the actuator 
     def On(self):
         for dc in range(95,101,1):
-            lock_pwm.ChangeDutyCycle(dc)
+            self.lock_pwm.ChangeDutyCycle(dc)
             sleep(0.1)
             if dc == 100:
+                check_int = 50
                 self.Stop()
 
     # 2.0 ms pulse signals it to fully extend
     def Off(self):
         for dc in range(48,40,-1):
-            lock_pwm.ChangeDutyCycle(dc)
+            self.lock_pwm.ChangeDutyCycle(dc)
             sleep(0.1)
             if dc == 41:
+                check_int = -50
                 self.Stop()
 
     def Stop(self):
         for dc in range(0,20,1):
-            lock_pwm.ChangeDutyCycle(dc)
+            self.lock_pwm.ChangeDutyCycle(dc)
             sleep(0.5)
 
 
-def check_password(value):
+# Confirm entered password
+def check_password(values):
     Crypto_Code = [0x01, 0x0f, 0x05, 0x0d, 0x08, 0x0b]
-    ch = np.equal(Crypto_Code, value)
+    ch = np.equal(Crypto_Code, values)
     if False in ch:
         LockOnOff().On()
     else:
@@ -117,33 +124,31 @@ class VideoChrc(Characteristic):
         Characteristic.__init__(
             self, bus, index,
             self.CMD_UUID, 
-            ['read', 'notify'],
+            ['read'],
             service)
-        self.notifying = False
-        self.value = []
+        self.values = self.videoFile(self.savepath)
         
     def videoFile(self, path):
         files_list = os.listdir(path)
-        return files_list
+        vla = []
+        vlla = []
+        for files in files_list:
+            files = files.replace('-','')
+            files = files.replace(':','')
+            files = files.replace(' ','')
+            files = files[:12]              # remove '.h264'
+            vla.append(files)
+    
+        for i in range(0,len(vla)):
+            for s in range(0, len(vla[i])):
+                vlla.append(int(vla[i][s:s+1]))
+        
+        return vlla
+            
     
     def ReadValue(self, options):
-        self.value = self.videoFile(self.savepath)
-        print('RowCharacteristic read: ' + repr(self.value))
-        return [dbus.Byte(i) for i in self.value]
-    
-    def StartNotify(self):
-        if self.notifying:
-            print("Already notifying, nothing to do")
-            return
-        
-        self.notifying = True
-    
-    def StopNotify(self):
-        if not self.notifying:
-            print('Not notifying, nothing to do')
-            return
-        
-        self.notifying = False
+        print('RowCharacteristic read: ' + repr(self.values))
+        return self.values
 
 
 class VideoService(Service):
