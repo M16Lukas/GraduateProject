@@ -52,7 +52,7 @@ class Recording(threading.Thread):
 
     def recordOneHour(self):
         now = datetime.datetime.now()
-        filename = now.strftime('%Y-%m-%d %H:%M:%S')
+        filename = now.strftime('%Y-%m-%d %H:%M')
         self.camera.start_recording(output = savepath+'/'+filename+'.h264')
         self.camera.wait_recording(self.recording_time)
         self.camera.stop_recording()
@@ -64,7 +64,7 @@ get_dir = Folder_control()
 
 while True:
     used_space = (get_dir.getDir(savepath) / get_dir.Unit('G'))
-    if used_space > 3.6:
+    if used_space > 3.0:
         get_dir.RemoveFile(savepath)
     else:
         Recording().recordOneHour()

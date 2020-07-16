@@ -2,7 +2,7 @@
 """
 - Title  : Bicycle Smart Lock
 - Writer : Minho Park
-- Date   : 13-07-2020 
+- Date   : 17-07-2020 
 """
 
 import sys
@@ -80,12 +80,24 @@ class LockOnOff(threading.Thread):
 
 # Confirm entered password
 def check_password(values):
-    Crypto_Code = [0x01, 0x0f, 0x05, 0x0d, 0x08, 0x0b]
-    ch = np.equal(Crypto_Code, values)
-    if False in ch:
-        LockOnOff().On()
+    Crypto_Open_Code  = [0x01, 0x0f, 0x05, 0x0d, 0x08, 0x0b]
+    Crypto_Close_Code = [0x0f, 0x0d, 0x07, 0x0c, 0x04, 0x0e]
+    if values[0] == 0x01:
+        ch = np.equal(Crypto_Open_Code, values)
+        if False in ch:
+            pass
+        else:
+            LockOnOff().Off()
+            
+    elif values[0] == 0x0f:
+        ch = np.equal(Crypto_Close_Code, values)
+        if False in ch:
+            pass
+        else:
+            LockOnOff().On()
+            
     else:
-        LockOnOff().Off()
+        pass
 
 
 class cmdChrc(Characteristic):
@@ -130,20 +142,22 @@ class VideoChrc(Characteristic):
         
     def videoFile(self, path):
         files_list = os.listdir(path)
-        vla = []
-        vlla = []
+        
+        video_list = []
+        int_video_list = []
+        
         for files in files_list:
             files = files.replace('-','')
             files = files.replace(':','')
             files = files.replace(' ','')
             files = files[:12]              # remove '.h264'
-            vla.append(files)
+            video_list.append(files)
     
-        for i in range(0,len(vla)):
-            for s in range(0, len(vla[i])):
-                vlla.append(int(vla[i][s:s+1]))
+        for i in range(0,len(video_list)):
+            for s in range(0, len(video_list[i])):
+                int_video_list.append(int(video_list[i][s:s+1]))
         
-        return vlla
+        return int_video_list
             
     
     def ReadValue(self, options):
