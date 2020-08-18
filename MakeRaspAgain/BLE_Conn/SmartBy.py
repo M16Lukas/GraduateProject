@@ -29,7 +29,6 @@ mainloop = None
 ################################
 ###     DC Motor Control     ###
 ################################
-
 # Init
 GPIO.setwarnings(False)
 GPIO.setmode(GPIO.BOARD)
@@ -48,36 +47,32 @@ GPIO.setup(ENA, GPIO.OUT)
 pwm = GPIO.PWM(ENA, 100)
 pwm.start(0)
 
-# Lock On & Off
-class LockOnOff():
-    def forward(self):
-        print("forwarding running motor")
-        GPIO.output(Rght, GPIO.HIGH)
-        GPIO.output(ENA, GPIO.HIGH)
-        for sp in range(15,25,1):
-            pwm.ChangeDutyCycle(sp)
-            time.sleep(0.1)
-        time.sleep(0.1)
-        GPIO.output(Rght, GPIO.LOW)
-        GPIO.output(ENA, GPIO.LOW)
+# Lock Function
+def Lock_ON():
+    print("lock on")
+    GPIO.output(Rght, GPIO.HIGH)
+    GPIO.output(ENA, GPIO.HIGH)
+    for sp in range(15,26,2):
+        pwm.ChangeDutyCycle(sp)
+        sleep(0.2)
+    stop()
 
-    def backward(self):
-        print("backwarding running motor")
-        GPIO.output(Lft, GPIO.HIGH)
-        GPIO.output(ENA, GPIO.HIGH)
-        for sp in range(15,25,1):
-            pwm.ChangeDutyCycle(sp)
-            time.sleep(0.1)
-        time.sleep(0.1)
-        GPIO.output(Lft, GPIO.LOW)
-        GPIO.output(ENA, GPIO.LOW)
 
-    def stop(self):
-        print("stopping motor")
-        GPIO.output(Rght, GPIO.LOW)
-        GPIO.output(Lft, GPIO.LOW)
-        GPIO.output(ENA, GPIO.LOW)
-        time.sleep(3)
+def Lock_OFF():
+    print("lock off")
+    GPIO.output(Lft, GPIO.HIGH)
+    GPIO.output(ENA, GPIO.HIGH)
+    for sp in range(15,26,2):
+        pwm.ChangeDutyCycle(sp)
+        sleep(0.2)
+    stop()
+
+
+def stop():
+    print("stopping motor")
+    GPIO.output(Rght, GPIO.LOW)
+    GPIO.output(Lft, GPIO.LOW)
+    GPIO.output(ENA, GPIO.LOW)
     
 
 # Confirm entered password
@@ -91,18 +86,18 @@ def check_password(values):
     if values[0] == 1:
         ch = np.equal(Crypto_Open_Code, values)
         if False in ch:
-            pass
+            stop()
         else:
-            LockOnOff().backward()
+            Lock_ON()
             
     elif values[0] == 15:
         ch = np.equal(Crypto_Close_Code, values)
         if False in ch:
-            pass
+            stop()
         else:
-            LockOnOff().forward()
+            Lock_OFF()
     else:
-        pass
+        stop()
 
 
 class cmdChrc(Characteristic):
