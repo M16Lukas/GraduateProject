@@ -34,37 +34,37 @@ GPIO.setwarnings(False)
 GPIO.setmode(GPIO.BOARD)
 
 # Pin
-Rght = 16 # BCM(23), IN1, Rght
-Lft  = 18 # BCM(24), IN2, Lft
-ENA  = 22 # BCM(25), PWM
+Rght = 36 # BCM(16), IN1, Rght
+Lft  = 38 # BCM(20), IN2, Lft
+ENB  = 40 # BCM(21), PWM
     
 # GPIO
 GPIO.setup(Rght, GPIO.OUT)
 GPIO.setup(Lft, GPIO.OUT)
-GPIO.setup(ENA, GPIO.OUT)
+GPIO.setup(ENB, GPIO.OUT)
         
 # PWM
-pwm = GPIO.PWM(ENA, 100)
+pwm = GPIO.PWM(ENB, 100)
 pwm.start(0)
 
 # Lock Function
-def Lock_ON():
-    print("lock on")
+def Lock_Close():
+    print("lock close")
     GPIO.output(Rght, GPIO.HIGH)
-    GPIO.output(ENA, GPIO.HIGH)
-    for sp in range(15,26,2):
-        pwm.ChangeDutyCycle(sp)
-        sleep(0.2)
+    GPIO.output(Lft, GPIO.LOW)
+    GPIO.output(ENB, GPIO.HIGH)
+    pwm.ChangeDutyCycle(6)
+    sleep(0.6)
     stop()
 
 
-def Lock_OFF():
-    print("lock off")
+def Lock_Open():
+    print("lock open")
+    GPIO.output(Rght, GPIO.LOW)
     GPIO.output(Lft, GPIO.HIGH)
-    GPIO.output(ENA, GPIO.HIGH)
-    for sp in range(15,26,2):
-        pwm.ChangeDutyCycle(sp)
-        sleep(0.2)
+    GPIO.output(ENB, GPIO.HIGH)
+    pwm.ChangeDutyCycle(6)
+    sleep(0.8)
     stop()
 
 
@@ -72,7 +72,7 @@ def stop():
     print("stopping motor")
     GPIO.output(Rght, GPIO.LOW)
     GPIO.output(Lft, GPIO.LOW)
-    GPIO.output(ENA, GPIO.LOW)
+    GPIO.output(ENB, GPIO.LOW)
     
 
 # Confirm entered password
@@ -88,14 +88,14 @@ def check_password(values):
         if False in ch:
             stop()
         else:
-            Lock_ON()
+            Lock_Open()
             
     elif values[0] == 15:
         ch = np.equal(Crypto_Close_Code, values)
         if False in ch:
             stop()
         else:
-            Lock_OFF()
+            Lock_Close()
     else:
         stop()
 
@@ -121,56 +121,6 @@ class MotorService(Service):
     def __init__(self, bus, index):
         Service.__init__(self, bus, index, self.SVC_UUID, True)
         self.add_characteristic(cmdChrc(bus, 0, self))
- 
-
-#######################################
-###       Black Box Control         ###
-#######################################
-
-class VideoChrc(Characteristic):
-    CMD_UUID = '020a0df4-0c74-1a40-725e-01806fac4081'
-    
-    savepath = '/home/pi/MakeRaspAgain/VideoRecord'
-    
-    def __init__(self, bus, index, service):
-        Characteristic.__init__(
-            self, bus, index,
-            self.CMD_UUID, 
-            ['read'],
-            service)
-        self.values = self.videoFile(self.savepath)
-        
-    def videoFile(self, path):
-        files_list = os.listdir(path)
-        
-        video_list = []
-        int_video_list = []
-        
-        for files in files_list:
-            files = files.replace('-','')
-            files = files.replace(':','')
-            files = files.replace(' ','')
-            files = files[:12]              # remove '.h264'
-            video_list.append(files)
-    
-        for i in range(0,len(video_list)):
-            for s in range(0, len(video_list[i])):
-                int_video_list.append(int(video_list[i][s:s+1]))
-        
-        return int_video_list
-            
-    
-    def ReadValue(self, options):
-        print('RowCharacteristic read: ' + repr(self.values))
-        return self.values
-
-
-class VideoService(Service):
-    SVC_UUID = '020a0df4-0c74-1a40-725e-01806fac4080'
-    
-    def __init__(self, bus, index):
-        Service.__init__(self, bus, index, self.SVC_UUID, True)
-        self.add_characteristic(VideoChrc(bus, 0, self))
 
 
 #######################################
@@ -181,7 +131,6 @@ class Func_Application(Application):
     def __init__(self, bus):
         Application.__init__(self, bus)
         self.add_service(MotorService(bus, 0))
-        self.add_service(VideoService(bus, 1))
  
  
 class Func_Advertisement(Advertisement):
