@@ -20,8 +20,7 @@ GPIO.setup(ENB, GPIO.OUT)
 pwm = GPIO.PWM(ENB, 100)
 pwm.start(0)
 
-sp = 80
-tim = 0.75
+tim = 0.6
 
 # Lock Function
 def Lock_Close():
@@ -29,8 +28,11 @@ def Lock_Close():
     GPIO.output(Rght, GPIO.HIGH)
     GPIO.output(Lft, GPIO.LOW)
     GPIO.output(ENB, GPIO.HIGH)
-    pwm.ChangeDutyCycle(sp)
-    sleep(tim)
+
+    for sp in range(26):
+        print(sp)
+        pwm.ChangeDutyCycle(sp)
+        sleep(tim)
     stop()
 
 
@@ -39,8 +41,11 @@ def Lock_Open():
     GPIO.output(Rght, GPIO.LOW)
     GPIO.output(Lft, GPIO.HIGH)
     GPIO.output(ENB, GPIO.HIGH)
-    pwm.ChangeDutyCycle(sp)
-    sleep(tim)
+
+    for sp in range(50, 100, 1):
+        print(sp)
+        pwm.ChangeDutyCycle(sp)
+        sleep(tim)
     stop()
 
 
@@ -53,12 +58,12 @@ def stop():
 
 
 try:
-	#Lock_Close()
-	Lock_Open()
+    Lock_Close()
+    #Lock_Open()
 except KeyboardInterrupt:
-	pwm.stop()
-	GPIO.cleanup()
-	sys.exit()
+    pwm.stop()
+    GPIO.cleanup()
+    sys.exit()
 
 pwm.stop()	
 GPIO.cleanup()
