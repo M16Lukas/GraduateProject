@@ -32,12 +32,7 @@ ONETIME_H_RES_MODE = 0x20
 ONETIME_H_RES_MODE2 = 0x21
 ONETIME_L_RES_MODE = 0x23
 
-GPIO.setwarnings(False)
-GPIO.setmode(GPIO.BOARD)
-
-neo_pin = 12		# GPIO PIN
-GPIO.setup(neo_pin, GPIO.OUT)
-
+neo_pin = board.D18		# GPIO PIN
 neo_cnt = 8				# Number of LED pixels 
 neo_brightness = 0.2	# LED brightness
 
@@ -56,18 +51,21 @@ class Illuminance(threading.Thread):
 		lux = int.from_bytes(luxBytes, byteorder='big')
 		i2c.close()
 		return lux
-	
-	def controlNeopixelThread(self):
-		while True:
-			lux_chk = self.readIlluminance()
-			print(lux_chk)
-			if lux_chk < 20:
-				pixels.fill((0,255,0)) # Green
-				pixels.show()
-			else:
-				pixels.fill((0,0,0)) # Off
-				pixels.show()
-			time.sleep(3)
 
+	def OnNeo(self):
+		pixels.fill((0,255,0)) # Green
+		pixels.show()
+	
+	def OffNeo(self):
+		pixels.fill((0,0,0)) # Off
+		pixels.show()
+
+	def controlNeopixelThread(self):
+		lux_chk = self.readIlluminance()
+		print(lux_chk)
+		if lux_chk < 15:
+			self.OnNeo()
+		else:
+			self.OffNeo()
 
 Illuminance().controlNeopixelThread()
