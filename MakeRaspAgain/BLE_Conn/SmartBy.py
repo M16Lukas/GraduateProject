@@ -2,7 +2,7 @@
 """
 - Title  : Bicycle Smart Lock
 - Writer : Minho Park
-- Date   : 17-07-2020 
+- Date   : 10-25-2020 
 """
 
 import sys
@@ -11,13 +11,20 @@ import threading
 import dbus
 import dbus.mainloop.glib
 
+# bh1750
+import smbus
+
+# neopixel
+import neopixel
+import board
+
 from time import sleep, time
 from bluez_components import *
 
 import RPi.GPIO as GPIO
 import numpy as np
 import subprocess as sp
- 
+
 try:
     from gi.repository import GObject
 except ImportError:
@@ -26,6 +33,71 @@ except ImportError:
  
 mainloop = None
 
+###############################
+###          BH1750         ###
+###############################
+# i2c channal number
+I2C_CH = 1
+
+# BH1750 addr
+BH1750_DEV_ADDR = 0x23
+
+CONT_H_RES_MODE = 0x10
+CONT_H_RES_MODE2 = 0x11
+CONT_L_RES_MODE = 0x13
+ONETIME_H_RES_MODE = 0x20
+ONETIME_H_RES_MODE2 = 0x21
+ONETIME_L_RES_MODE = 0x23
+
+neo_pin = board.D18		# GPIO PIN
+neo_cnt = 8				# Number of LED pixels 
+neo_brightness = 0.2	# LED brightness
+
+pixels = neopixel.NeoPixel(neo_pin, neo_cnt, brightness = neo_brightness)
+
+class Illuminance(threading.Thread):
+    def __init__(self):
+		      threading.Thread.__init__(self)
+
+	   def readIlluminance(self):
+		      # Create I2C library
+		      i2c = smbus.SMBus(I2C_CH)
+		      # Read 2 bytes measured in the measurement mode 'CONT_H_RES_MODE'
+		      luxBytes = i2c.read_i2c_block_data(BH1750_DEV_ADDR, CONT_H_RES_MODE, 2)
+		      # 'bytes Array' to 'int'
+		      lux = int.from_bytes(luxBytes, byteorder='big')
+		      i2c.close()
+		      return lux
+
+	def showNeo(self,RGB_list):
+     R = RGB_list[0]
+     G = RGB_list[1]
+     B = RGB_list[2]
+     
+     pixels.fill((R,G,B))
+     pixels.show()
+
+	def controlNeopixelThread(self):
+		   lux_chk = self.readIlluminance()
+		   if lux_chk < 15:
+			     self.showNeo([0,255,0])
+		   else:
+			     self.showNeo([0,0,0])
+ 
+ 
+ def selectNeopixelColor(in_value):
+    neo_clr = [[2,3],[3,4],[4,5],[5,6],[6,7],[7,8]]
+    neo_rgb = {0:[255,0,0], 1:[255,94,0], 2:[255,228,0], 3:[0,255,0], 4:[0,0,255], 5:[217,65,197], 6:[0,0,0]}
+    
+    i = in_value[0]-2
+    confirm_num = np.equal(neo_clr[i], in_value)
+    
+    if False in confirm_num:
+        return neo_rgb[6]
+    else:
+        return neo_rgb[i]
+ 
+ 
 ################################
 ###     DC Motor Control     ###
 ################################
@@ -53,8 +125,8 @@ def Lock_Close():
     GPIO.output(Rght, GPIO.HIGH)
     GPIO.output(Lft, GPIO.LOW)
     GPIO.output(ENB, GPIO.HIGH)
-    pwm.ChangeDutyCycle(6)
-    sleep(0.6)
+    pwm.ChangeDutyCycle(40)
+    sleep(5)
     stop()
 
 
@@ -63,8 +135,8 @@ def Lock_Open():
     GPIO.output(Rght, GPIO.LOW)
     GPIO.output(Lft, GPIO.HIGH)
     GPIO.output(ENB, GPIO.HIGH)
-    pwm.ChangeDutyCycle(6)
-    sleep(0.8)
+    pwm.ChangeDutyCycle(40)
+    sleep(5)
     stop()
 
 
@@ -74,7 +146,7 @@ def stop():
     GPIO.output(Lft, GPIO.LOW)
     GPIO.output(ENB, GPIO.LOW)
     
-
+    
 # Confirm entered password
 def check_password(values):
     list_value = []
@@ -89,6 +161,7 @@ def check_password(values):
             stop()
         else:
             Lock_Open()
+            Illuminance().controlNeopixelThread()
             
     elif values[0] == 15:
         ch = np.equal(Crypto_Close_Code, values)
@@ -96,6 +169,11 @@ def check_password(values):
             stop()
         else:
             Lock_Close()
+          
+    ### NeoPixel
+    elif values[0] >= 2 and values[0] <= 7:
+        neo_color = selectNeopixelColor(values)
+        Illuminance().showRGB(neo_color)
     else:
         stop()
 
