@@ -1,5 +1,8 @@
 # GraduateProject
 
+- Writer : Minho Park
+- Date   : 10-25-2020
+
 ================[ SmartBy.py ]================
 
 1. 안드로이드 어플과 라즈베리파이 간 BLE 연결 
