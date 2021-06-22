@@ -3,6 +3,8 @@
 - Writer : Minho Park
 - Date   : 10-25-2020
 
+[korean(한국어)](./README-kr.md)
+
 ## ================[ SmartBy.py ]================
 
 ### １．アンドロイドアプリとラズベリーパイの間、BLE(Bluetooth Low Energy)連結
